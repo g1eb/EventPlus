@@ -19,6 +19,7 @@ from eval import *
 import pdb
 from EventPipeline import EventPipeline
 from JsonBuilder import JsonBuilder
+from ner import NERPrediction
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -105,7 +106,9 @@ class BETTER_API:
                 ('B-GPE', 8), ('I-GPE', 9),
                 ('B-LOC', 10), ('I-LOC', 11),
                 ('B-FAC', 12), ('I-FAC', 13),
-                ('B-PER', 14), ('I-PER', 15)]
+                ('B-PER', 14), ('I-PER', 15),
+                ('B-MISC', 16), ('I-MISC', 17),
+                ]
                 )
         args._id_to_label_e_sent = OrderedDict([(v, k) for k, v in args._label_to_id_e_sent.items()])
 
@@ -154,12 +157,16 @@ class BETTER_API:
         args.ner_weight=0.0
         model = BertClassifier(args)
         # specify NER model attributes
-        args.use_crf_ner=True
-        args.use_att=True
-        args.bert_model_type='bert-large-cased'
-        args.hid_lastmlp=512
-        args.ner_weight=1.0
-        model_ner = BertClassifier(args)
+        # args.use_crf_ner=True
+        # args.use_att=True
+        # args.bert_model_type='bert-large-cased'
+        # args.hid_lastmlp=512
+        # args.ner_weight=1.0
+        model_ner = NERPrediction(
+            model='dslim/bert-large-NER',
+            labels= args._id_to_label_e_sent
+        )
+
         self.system = EventPipeline(args, model, model_t, model_ner)
         self.system.load(filename=os.path.join(args.base_dir, args.load_model_path), filename_t=os.path.join(args.base_dir, args.load_model_path_t), filename_ner=os.path.join(args.base_dir, args.load_model_path_ner))
 
@@ -172,6 +179,7 @@ class BETTER_API:
         self.system.predict_pipeline(input_sent)
         json_out = json_builder.from_preds(input_sent, y_preds_t, y_preds_e, y_preds_ner)
         return json_out
+
 def main(args):
     api = BETTER_API()
     # input_sent = ['Yesterday', 'New', 'York', 'governor', 'George', 'Pataki', 'toured', 'five', 'counties', 'that', 'have', 'been', 'declared', 'under', 'a', 'state', 'of', 'emergency']

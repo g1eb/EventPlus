@@ -17,7 +17,6 @@ from neural_model import BertClassifier
 from generate_data.contextualized_features_bert import bert_token
 
 
-
 def get_tri_idx_from_mix_sent(out_t, B2I):
     '''
     get trigger idx from a sent with possibly MULTIPLE events
@@ -273,14 +272,14 @@ class EventPipeline(nn.Module):
         if self.best_model_t:
             self.best_model_t.eval()
         if self.best_model_ner:
-            self.best_model_ner.eval()
+            self.best_model_ner.model.eval()
         if self.args.cuda:
             self.model.cuda()
             # self.best_model.cuda()
             if self.best_model_t:
                 self.best_model_t.cuda()
             if self.best_model_ner:
-                self.best_model_ner.cuda()
+                self.best_model_ner.model.cuda()
 
         y_trues_e, y_preds_e, y_trues_t, y_preds_t = [], [], [], []
         y_trues_ner, y_preds_ner = [], []
@@ -290,33 +289,36 @@ class EventPipeline(nn.Module):
         sent_ids = ['test_sample']
 
         # prepare the bert-large-case tokenzier required by the NER mdoel
-        MODELS = [(BertConfig, BertModel, BertTokenizer, 'bert-large-cased')]
-        for config_class, model_class, tokenizer_class, pretrained_weights in MODELS:
-            config = config_class.from_pretrained(pretrained_weights, output_hidden_states=True)
-            bert_tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
-        sent_bert_tokens, sent_bert_ids, orig_to_tok_map = bert_token(input_sent, bert_tokenizer)
-        sents = torch.LongTensor(sent_bert_ids).unsqueeze(0)
+        # MODELS = [(BertConfig, BertModel, BertTokenizer, 'bert-large-cased')]
+        # for config_class, model_class, tokenizer_class, pretrained_weights in MODELS:
+        #     config = config_class.from_pretrained(pretrained_weights, output_hidden_states=True)
+        #     bert_tokenizer = tokenizer_class.from_pretrained(pretrained_weights)
+        # sent_bert_tokens, sent_bert_ids, orig_to_tok_map = bert_token(input_sent, bert_tokenizer)
+        # sents = torch.LongTensor(sent_bert_ids).unsqueeze(0)
+        # lengths = [len(input_sent)]
+        # bert_lengths = [len(sent_bert_ids)]
+        #
+        # # crf mask
+        # max_len = lengths[0]
+        # crf_mask = torch.arange(max_len).expand(len(lengths), max_len) < torch.LongTensor(lengths).unsqueeze(1)
+        # # bert mask
+        # bert_max_len = max(bert_lengths)
+        # bert_attn_mask = torch.arange(bert_max_len).expand(len(bert_lengths), bert_max_len) < torch.LongTensor(bert_lengths).unsqueeze(1)
+        # bert_attn_mask = bert_attn_mask.type(torch.FloatTensor)
+        #
+        # if self.args.cuda:
+        #     sents = sents.cuda()
+        #     bert_attn_mask = bert_attn_mask.cuda()
+        #     crf_mask = crf_mask.cuda()
+
+        # NER prediction #TODO
+        out_ner = self.best_model_ner.analyze(input_sent)
         lengths = [len(input_sent)]
-        bert_lengths = [len(sent_bert_ids)]
-
-        # crf mask
-        max_len = lengths[0]
-        crf_mask = torch.arange(max_len).expand(len(lengths), max_len) < torch.LongTensor(lengths).unsqueeze(1)
-        # bert mask
-        bert_max_len = max(bert_lengths)
-        bert_attn_mask = torch.arange(bert_max_len).expand(len(bert_lengths), bert_max_len) < torch.LongTensor(bert_lengths).unsqueeze(1)
-        bert_attn_mask = bert_attn_mask.type(torch.FloatTensor)
-
-        if self.args.cuda:
-            sents = sents.cuda()
-            bert_attn_mask = bert_attn_mask.cuda()
-            crf_mask = crf_mask.cuda()
-
-        # NER prediction
-        self.args.bert_encode_mthd='max'
-        out_ner, _, crf_loss_ner, _ = self.best_model_ner(sents, None, lengths, task='ner',
-                                   crf=True, seq_tags=None, crf_mask=crf_mask,
-                                   use_att=True, orig_to_tok_map=[orig_to_tok_map], bert_attn_mask=bert_attn_mask)
+        print(out_ner)
+        # self.args.bert_encode_mthd='max'
+        # out_ner, _, crf_loss_ner, _ = self.best_model_ner(sents, None, lengths, task='ner',
+        #                            crf=True, seq_tags=None, crf_mask=crf_mask,
+        #                            use_att=True, orig_to_tok_map=[orig_to_tok_map], bert_attn_mask=bert_attn_mask)
         ner_label, ner_pred = get_prediction_crf(lengths, None, out_ner)
         y_preds_ner.extend(ner_pred)
         argu_cands = torch.LongTensor(ner_pred)
@@ -650,12 +652,14 @@ class EventPipeline(nn.Module):
                 print("trigger model load from {}".format(filename_t))
             if filename_ner:
                 # arg model
-                checkpoint = torch.load(filename_ner, map_location=device)
-                # self.model.load_state_dict(checkpoint['model'])
-                # self.best_model_e.load_state_dict(checkpoint['model'])
-                # self.best_model_state_dict = checkpoint['model']
-                self.best_model_ner.load_state_dict(checkpoint['model'])
-                print("NER model load from {}".format(filename_ner))
+                # checkpoint = torch.load(filename_ner, map_location=device)
+                # # self.model.load_state_dict(checkpoint['model'])
+                # # self.best_model_e.load_state_dict(checkpoint['model'])
+                # # self.best_model_state_dict = checkpoint['model']
+                # self.best_model_ner.load_state_dict(checkpoint['model'])
+                self.best_model_ner.model.to(device)
+                self.best_model_ner.model_device = device
+                print("NER model loaded")
         except BaseException as e:
             print(e)
             print("Cannot load model from {}".format(filename))
